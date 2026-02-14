@@ -30,6 +30,11 @@ def get_best_move(fen, depth, discrete):
 
         return moves
 
+
+@app.route('/', methods=['GET'])
+def index():
+    return 'MeanChess API is running. Use /api?algebra=<moves>&depth=<seconds>&discrete=0', 200
+
 @app.route('/api', methods=['GET'])
 def api():
     algebraic_notation = request.args.get("algebra")
