@@ -1,4 +1,5 @@
 from flask import Flask, request
+import os
 import chess, chess.engine
 
 app = Flask(__name__)
@@ -14,7 +15,8 @@ def algebraic_to_fen(algebraic_notation):
 
 def get_best_move(fen, depth, discrete):
     board = chess.Board(fen)
-    engine = chess.engine.SimpleEngine.popen_uci("PATH_TO_STOCKFISH")
+    stockfish_path = os.getenv("STOCKFISH_PATH", "PATH_TO_STOCKFISH")
+    engine = chess.engine.SimpleEngine.popen_uci(stockfish_path)
 
     if not discrete:
         result = engine.play(board, chess.engine.Limit(time=depth))

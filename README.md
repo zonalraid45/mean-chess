@@ -1,17 +1,48 @@
 # MeanChess
-Discrete, dishonourable, and semi-automatic Lichess cheat engine. Especially optimized for blitz and bullet games.
+Single-arrow best-move suggestion overlay for Lichess.
 
 ## Install
 * The code in `meanChess.js` is a Tampermonkey userscript. 
 * `chess_server.py` is a Flask server using `python-chess` for chess programming utilities. Run it using `python chess_server.py`. Before doing so, run `pip install -r requirements.txt`. Change `PATH_TO_STOCKFISH` to your local Stockfish engine.
 
+
+## Run with GitHub Actions + Tampermonkey (phone-friendly)
+1. Push this repo to your own GitHub account.
+2. Open **Actions** -> **Temporary API for Tampermonkey** -> **Run workflow**.
+3. After it starts, open job logs and copy the printed `https://...trycloudflare.com` URL.
+4. In Tampermonkey, install/update `meanChess.js`.
+5. Open Lichess, paste that URL into **API URL** in the control box, then tap **Show Best Move**.
+
+Notes:
+- You do not type chess moves manually; the userscript reads move history directly from the board.
+- The Actions URL is temporary and expires when the workflow ends.
+- Re-run workflow whenever the URL expires.
+
+## Run locally (optional)
+1. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+2. Install Stockfish and set environment variable:
+   ```bash
+   export STOCKFISH_PATH=/path/to/stockfish
+   ```
+3. Start the API server:
+   ```bash
+   python chess_server.py
+   ```
+4. In Tampermonkey keep API URL empty (defaults to `http://127.0.0.1:5000`).
+
+## Phone note
+For phone usage, easiest is running the included GitHub Actions workflow to get a temporary public API URL. You still do **not** type moves manually.
+
 ## Usage
-The control panel will present itself at the bottom of the page during a Lichess game. Follow the instructions given. MeanChess supports "Discrete mode" in which the player is given two arrows. The green arrow will always represent the best move given a position whilst the blue arrow is a good move at best, and a mistake at worst. If the player wishes to only get the best move once, they may press the "Get move" button.  
+The control panel appears at the bottom of the page during a Lichess game. Click **Show Best Move** to draw a single arrow for the engine's top move in the current position.
 
 MeanChess does not work when playing anonymously.
 
 ## Bugs
-1. May stop working when making many premoves in succession. Solution: Press "Stop" followed by "Start Cheat". Alternatively, get gud.
+1. If the arrow feels stale after many premoves, click **Show Best Move** again to refresh it.
 2. Arrows may not have arrowheads. Solution: Draw an arrow.
 3. The first suggestion might show best move for opponent. This only happens once.
 
