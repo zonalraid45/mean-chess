@@ -3,7 +3,7 @@
 // @version           0.1
 // @description       Dishonourable chess
 // @author            kcl
-// @connect	      127.0.0.1
+// @connect           *
 // @match             https://lichess.org/*
 
 // @grant GM_xmlhttpRequest
@@ -12,8 +12,6 @@
 (function() {
     'use strict';
 window.addEventListener("load", function() {
-let lastMoveHistory;
-let observer;
 
 const tileCoordinates = {
 	a1: { x: 3.5, y: -3.5 },
@@ -89,20 +87,34 @@ const tileCoordinates = {
 	h8: { x: -3.5, y: 3.5 },
 };
 
+const defaultApiBaseUrl = "http://127.0.0.1:5000";
+
+function getApiBaseUrl() {
+	const apiInput = document.getElementById("apiBaseUrl");
+	if (!apiInput) return defaultApiBaseUrl;
+	const trimmed = apiInput.value.trim();
+	return trimmed === "" ? defaultApiBaseUrl : trimmed.replace(/\/$/, "");
+}
+
+function saveApiBaseUrl() {
+	const apiInput = document.getElementById("apiBaseUrl");
+	if (!apiInput) return;
+	localStorage.setItem("meanChessApiBaseUrl", apiInput.value.trim());
+}
+
+function loadApiBaseUrl() {
+	const saved = localStorage.getItem("meanChessApiBaseUrl");
+	if (saved) {
+		document.getElementById("apiBaseUrl").value = saved;
+	}
+}
+
 function whatPlayerColour(username) {
 	let whitePlayer = document.querySelector(".player.color-icon.is.white.text .user-link").textContent;
 	if (whitePlayer.includes(username)) {
 		return (-1);
 	}
 	return 1;
-}
-
-function playerToMove() {
-	const movePositionHistoryLength = document.getElementsByTagName("kwdb").length;
-	if (movePositionHistoryLength % 2 == 1) {
-		return 1;
-	}
-	return (-1);
 }
 
 function getMoveHistory() {
@@ -153,69 +165,17 @@ function removeArrow() {
     }
 }
 
-function fetchMove(depth, discrete) {
+function fetchMove(depth) {
 	let moveHistory = getMoveHistory()
-	if (!discrete) {
-		GM_xmlhttpRequest({
-			method: "GET",
-			url: "http://127.0.0.1:5000/api?algebra=" + moveHistory.toString() + "&depth=" + depth + "&discrete=0",
-			onload: function(response) {
-				var arrowElements = response.responseText.split(' ');
-				if (arrowElements[1].length > 2) { arrowElements[1] = arrowElements[1].slice(0, 2); }
-				drawArrow(arrowElements[0], arrowElements[1], 1, "#15781B", "g");
-			}
-		});
-	}
-
-	else {
-		GM_xmlhttpRequest({
-			method: "GET",
-			url: "http://127.0.0.1:5000/api?algebra=" + moveHistory.toString() + "&depth=" + depth + "&discrete=1",
-			onload: function(response) {
-				let moves = JSON.parse(response.responseText);
-				let bestMove = moves[0];
-				let discreteMove = moves[1];
-
-				let bestMoveStartSqr = bestMove.substring(0, 2);
-				let bestMoveDestSqr = bestMove.substring(2).slice(0, 2);
-				let discreteMoveStartSqr = discreteMove.substring(0, 2);
-				let discreteMoveDestSqr = discreteMove.substring(2).slice(0, 2);
-
-				drawArrow(bestMoveStartSqr, bestMoveDestSqr, 1, "#15781B", "g");
-				drawArrow(discreteMoveStartSqr, discreteMoveDestSqr, 0.6, "#5C85D6", "d");
-			}
-		});
-	}
-}
-
-function cheatWrapper() {
-  let currentPlayerTurn = playerToMove();
-  const moveHistory = getMoveHistory();
-
-  if (moveHistory !== lastMoveHistory) {
-    lastMoveHistory = moveHistory;
-    if (currentPlayerTurn === playerColour) {
-    	let depth = getDepth();
-      fetchMove(depth, isDiscrete());
-      }
-    }
-  }
-
-function observeNewMove() {
-    const targetElements = document.querySelectorAll('.last-move');
-    const lastElement = targetElements[targetElements.length - 1];
-
-    if (lastElement) {
-        observer = new MutationObserver((mutationsList, observer) => {
-            for (const mutation of mutationsList) {
-                if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
-                  removeArrow();
-                  cheatWrapper();
-                }
-            }
-        });
-        observer.observe(lastElement, { attributes: true });
-    }
+	GM_xmlhttpRequest({
+		method: "GET",
+		url: getApiBaseUrl() + "/api?algebra=" + moveHistory.toString() + "&depth=" + depth + "&discrete=0",
+		onload: function(response) {
+			var arrowElements = response.responseText.split(' ');
+			if (arrowElements[1].length > 2) { arrowElements[1] = arrowElements[1].slice(0, 2); }
+			drawArrow(arrowElements[0], arrowElements[1], 1, "#15781B", "g");
+		}
+	});
 }
 
 function getDepth() {
@@ -223,14 +183,6 @@ function getDepth() {
 		return "0.5"; // No need to make it string, but it makes it more consistent
 	}
 	return document.getElementById("depth").value;
-}
-
-function isDiscrete() {
-	const discrete = document.getElementById("discrete");
-	if (discrete.checked) {
-		return true;
-	}
-	return false;
 }
 
 // ************************************ NORMAL
@@ -249,29 +201,12 @@ pathElement.setAttribute("d", "M0,0 V4 L3,2 Z");
 pathElement.setAttribute("fill", "#15781B");
 // ************************************ NORMAL
 
-// ************************************ DISCRETE
-const markerElementD = document.createElementNS("http://www.w3.org/2000/svg", "marker");
-markerElementD.setAttribute("id", "arrowhead-d");
-markerElementD.setAttribute("orient", "auto");
-markerElementD.setAttribute("overflow", "visible");
-markerElementD.setAttribute("markerWidth", "4");
-markerElementD.setAttribute("markerHeight", "4");
-markerElementD.setAttribute("refX", "2.05");
-markerElementD.setAttribute("refY", "2");
-markerElementD.setAttribute("cgKey", "g");
-
-const pathElementD = document.createElementNS("http://www.w3.org/2000/svg", "path");
-pathElementD.setAttribute("d", "M0,0 V4 L3,2 Z");
-pathElementD.setAttribute("fill", "#5C85D6");
-// ************************************ DISCRETE
 markerElement.appendChild(pathElement);
-markerElementD.appendChild(pathElementD);
 
 const defsElement = document.querySelector(".cg-shapes defs");
 
 if (defsElement) {
   defsElement.appendChild(markerElement);
-  defsElement.appendChild(markerElementD);
 }
 
 var player = document.getElementById("user_tag").textContent;
@@ -303,14 +238,15 @@ const cssRules = `
   background-color: #444;
 }
 
-#depth {
+#depth,
+#apiBaseUrl {
   background-color: #ddd;
   color: #333;
   border: none;
   padding: 10px;
   margin: 5px;
   border-radius: 5px;
-  width: 20%;
+  width: 24%;
 }
 
 p {
@@ -318,25 +254,6 @@ p {
   margin: 10px 0;
 }
 
-#stopCheat {
-  background-color: #f00;
-}
-
-#stopCheat:hover {
-  background-color: #d00;
-}
-
-#startCheat {
-  width: 50%;
-}
-
-.spancont {
-	width: 75%;
-}
-
-input[type="checkbox"] {
-  margin-right: 5px;
-}
 `;
 styleElement.textContent = cssRules;
 document.head.appendChild(styleElement);
@@ -345,41 +262,25 @@ const controlBoxDiv = document.createElement('div');
 controlBoxDiv.classList.add('control-box');
 controlBoxDiv.innerHTML = `
 <div class="control-box">
-    <button id="startCheat" class="cheatButton">Start Cheat</button><br>
-    <span class="spancont">
-    <input type="checkbox" id="discrete">
-    <label for="discrete">Multiple Arrows</label>
-    <button id="moveButton" class="cheatButton">Get Move</button>
-    <button id="stopCheat" class="cheatButton">Stop</button>
+    <button id="moveButton" class="cheatButton">Show Best Move</button>
     <input id="depth" type="text" placeholder="Analysis depth (seconds)">
-    <p>Warning: A piece on the board must have previously moved before starting cheat.</p>
-	</span>
+    <input id="apiBaseUrl" type="text" placeholder="API URL (default http://127.0.0.1:5000)">
+    <p>Shows one arrow for the best move only.</p>
 </div>
 `;
 
 document.body.appendChild(controlBoxDiv);
 
-const cheatButton = document.getElementById("startCheat");
-const stopButton = document.getElementById("stopCheat");
 const getBestMoveButton = document.getElementById("moveButton");
+const apiBaseUrlInput = document.getElementById("apiBaseUrl");
+
+loadApiBaseUrl();
+apiBaseUrlInput.addEventListener("change", saveApiBaseUrl);
 
 getBestMoveButton.addEventListener("click", function() {
 	let depth = getDepth();
-	fetchMove(depth, isDiscrete());
 	removeArrow();
-});
-
-stopButton.addEventListener("click", function() {
-    if (observer) {
-        observer.disconnect();
-    }
-});
-
-cheatButton.addEventListener("click", function() {
-	lastMoveHistory = getMoveHistory();
-	let depth = getDepth();
-  fetchMove(depth, isDiscrete());
-	observeNewMove();
+	fetchMove(depth);
 });
 });
 
