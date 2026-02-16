@@ -37,6 +37,24 @@ It:
 3. Analyzes with MultiPV=3.
 4. Prints best move + two alternatives with evals.
 
+
+## No-input API behavior
+You can call the local API with **no query input**:
+
+```text
+GET /api
+```
+
+In this mode, the server analyzes the standard starting chess position at the default depth (`0.7` seconds) and returns one suggested move.
+
+How it works internally:
+1. Missing `algebra` defaults to an empty move list, so the board stays at the initial setup.
+2. Missing `depth` defaults to `0.7` seconds.
+3. Missing `discrete` defaults to `0` (single best move mode).
+4. The server asks Stockfish for the best move and returns it in spaced UCI format (example: `e2 e4`).
+
+You can still provide any of these query parameters when needed.
+
 ## Local API mode (legacy)
 `chess_server.py` is still included if you want to run local Flask + Stockfish manually, but the userscript is now focused on GitHub Actions dispatch mode.
 
