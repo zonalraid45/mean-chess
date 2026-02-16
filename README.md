@@ -1,61 +1,90 @@
 # MeanChess
-Single-arrow best-move suggestion overlay for Lichess.
+Tampermonkey script for Lichess that sends each post-opponent position to GitHub Actions and prints top Stockfish lines in the workflow log.
 
-## Install
-* The code in `meanChess.js` is a Tampermonkey userscript. 
-* `chess_server.py` is a Flask server using `python-chess` for chess programming utilities. Run it using `python chess_server.py`. Before doing so, run `pip install -r requirements.txt`. Change `PATH_TO_STOCKFISH` to your local Stockfish engine.
+## What it does
+After your opponent moves, the userscript automatically sends the game move history to a GitHub Actions workflow. The workflow rebuilds the position, runs Stockfish with MultiPV=3, and logs output like:
+
+```text
+Opponent:    Samyakchourasia
+Current move:26
+FEN:         r4rk1/pp3ppp/2p1pn2/3p4/3P4/2P1P1P1/PP3PBP/2R1R1K1 b - - 0 26
+STOCKFISH    26... Qf7    +0.9
+ALTERNATIVE  26... Re7    +0.1
+ALT #2       26... Rf8    -0.2
+Link: https://lichess.org/24a85lUX
+```
+
+## Setup
+1. Fork or push this repo to your own GitHub account.
+2. Create a Personal Access Token (classic is fine) with at least **repo** and **workflow** scopes.
+3. Open `meanChess.js` and set:
+   - `owner`
+   - `repo`
+   - `eventType` (default: `analyze-position`)
+   - `githubToken` (token value itself)
+   - optional: `depthSeconds`, `pollMs` (recommended for blitz: `depthSeconds: '0.7'`)
+4. Install/update `meanChess.js` in Tampermonkey.
+5. Open a Lichess game while logged in.
+
+Now every time your opponent completes a move (and it becomes your turn), the script dispatches the workflow.
+
+The workflow keeps only one manual input: `depth`.
+All position/game data (`algebra`, `opponent`, `current_move`, `game_url`) is sent directly by Tampermonkey through `repository_dispatch` payload.
+
+## GitHub Actions workflow
+Workflow file: `.github/workflows/tampermonkey-api.yml`
+
+It:
+1. Installs Python deps + Stockfish.
+2. Recreates the position from SAN move history.
+3. Analyzes with MultiPV=3.
+4. Prints best move + two alternatives with evals.
+
+## Local API mode (legacy)
+`chess_server.py` is still included if you want to run local Flask + Stockfish manually, but the userscript is now focused on GitHub Actions dispatch mode.
 
 
-## Run with GitHub Actions + Tampermonkey (phone-friendly)
-1. Push this repo to your own GitHub account.
-2. Open **Actions** -> **Temporary API for Tampermonkey** -> **Run workflow**.
-3. After it starts, open job logs and copy the printed `https://...trycloudflare.com` URL.
-4. In Tampermonkey, install/update `meanChess.js`.
-5. Open Lichess, paste that URL into **API URL** in the control box, then tap **Show Best Move**.
+## Exactly what you need to do (quick)
+1. Open `meanChess.js`.
+2. Replace these placeholders in `CONFIG`:
+   - `owner: 'YOUR_GITHUB_USERNAME'`
+   - `repo: 'YOUR_REPO_NAME'`
+   - `githubToken: 'YOUR_GITHUB_PAT'`
+3. Keep `depthSeconds: '0.7'` for blitz (fast response).
+4. Save script in Tampermonkey and enable it.
+5. Open a Lichess game (logged in).
+6. After every opponent move, check GitHub Actions logs for:
+   - `STOCKFISH`
+   - `ALTERNATIVE`
+   - `ALT #2`
 
-Notes:
-- You do not type chess moves manually; the userscript reads move history directly from the board.
-- The Actions URL is temporary and expires when the workflow ends.
-- Re-run workflow whenever the URL expires.
+If you want even faster but weaker suggestions, set `depthSeconds` to `0.5`.
 
-## Run locally (optional)
-1. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-2. Install Stockfish and set environment variable:
-   ```bash
-   export STOCKFISH_PATH=/path/to/stockfish
-   ```
-3. Start the API server:
-   ```bash
-   python chess_server.py
-   ```
-4. In Tampermonkey keep API URL empty (defaults to `http://127.0.0.1:5000`).
+## About your `GH` secret (important)
+If your token is saved in GitHub Secrets as `GH`, that secret is only visible **inside GitHub Actions runtime**. The browser userscript on `lichess.org` cannot read repo secrets directly.
 
-## Phone note
-For phone usage, easiest is running the included GitHub Actions workflow to get a temporary public API URL. You still do **not** type moves manually.
+So for dispatching workflows from Tampermonkey, you must provide:
+- `owner`: GitHub API needs to know which account/org repo to call.
+- `repo`: GitHub API needs the exact target repository.
+- `githubToken`: Authorization for `repository_dispatch` API call.
 
-## Usage
-The control panel appears at the bottom of the page during a Lichess game. Click **Show Best Move** to draw a single arrow for the engine's top move in the current position.
+In short: secret name `GH` is not enough in browser. You must use the token **value** in Tampermonkey (or route through your own backend/proxy).
 
-MeanChess does not work when playing anonymously.
 
-## Bugs
-1. If the arrow feels stale after many premoves, click **Show Best Move** again to refresh it.
-2. Arrows may not have arrowheads. Solution: Draw an arrow.
-3. The first suggestion might show best move for opponent. This only happens once.
+## Why config is needed
+The userscript calls GitHub's API endpoint:
+`POST /repos/{owner}/{repo}/dispatches`
 
-The mentioned bugs occur in Chrome, and I have yet to see 1 and 2 in Firefox and Firefox forks.
+So it must know:
+- `owner`: which account/org owns the repo.
+- `repo`: which repo contains the workflow.
+- `githubToken`: auth token allowed to trigger `repository_dispatch`.
 
-## Depth recommendation
-Based on time vs. best move trade-offs.
-| Gamemode | Depth |
-| ------:| -----------:|
-| Bullet       | 0.1 s |
-| Blitz        | 1 s |
-| $\geq$ Rapid | +3 s |
+Without these, GitHub cannot know where to send the request and will reject it.
 
-## Demo
-[mean-chess-demo.webm](https://github.com/sanglantes/mean-chess/assets/101125878/942a80c3-8ea4-4c80-91e6-7f7392106fe3)
+## Can I just put `GH` (secret name) in config?
+No. `GH` is only a secret **name** inside GitHub Actions runtime. Tampermonkey runs in your browser on lichess.org and cannot read GitHub repo secrets.
 
+So:
+- `githubToken: 'GH'` will not work.
+- You must either use the actual token value in Tampermonkey, **or** build your own backend/proxy that holds the token server-side and accepts safe requests from the script.
