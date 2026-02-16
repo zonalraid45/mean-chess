@@ -70,10 +70,28 @@ jobs:
           game_url = (os.environ.get("GAME_URL") or "https://lichess.org").strip()
           stockfish_path = os.environ.get("STOCKFISH_PATH", "/usr/games/stockfish")
 
+          def normalize_move_token(token):
+            return token.strip().strip("\"'")
+
+          def apply_move_list(board, move_text):
+            for raw_token in move_text.split():
+              token = normalize_move_token(raw_token)
+              if not token:
+                continue
+              try:
+                board.push_san(token)
+                continue
+              except ValueError:
+                pass
+
+              try:
+                board.push_uci(token)
+              except ValueError as exc:
+                raise ValueError(f"Invalid move token: {raw_token!r}") from exc
+
           board = chess.Board()
           if algebra:
-            for san in algebra.split():
-              board.push_san(san)
+            apply_move_list(board, algebra)
 
           side_to_move = board.turn
           move_prefix = f"{current_move}{'...' if side_to_move == chess.BLACK else '.'}"
