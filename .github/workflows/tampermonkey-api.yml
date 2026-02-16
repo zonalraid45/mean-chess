@@ -5,7 +5,7 @@ on:
     inputs:
       algebra:
         description: "Space-separated SAN move history from start position"
-        required: true
+        required: false
         type: string
       depth:
         description: "Stockfish think time in seconds"
