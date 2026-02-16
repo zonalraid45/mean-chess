@@ -58,10 +58,19 @@ def index():
     return 'MeanChess API is running. Use /api?algebra=<moves>&depth=<seconds>&discrete=0', 200
 
 
+DEFAULT_DEPTH_SECONDS = 0.7
+
+
 @app.route('/api', methods=['GET'])
 def api():
+    """Return Stockfish guidance with optional query params.
+
+    Zero-input mode:
+    - /api with no query params analyzes the starting chess position.
+    - Optional params still work for custom positions/depth.
+    """
     algebraic_notation = request.args.get("algebra", "")
-    depth = float(request.args.get("depth", "0.7"))
+    depth = float(request.args.get("depth", str(DEFAULT_DEPTH_SECONDS)))
     discrete = int(request.args.get("discrete", "0"))
 
     best_move = get_best_move(algebraic_to_fen(algebraic_notation), depth, discrete)
