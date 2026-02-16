@@ -1,61 +1,58 @@
 # MeanChess
-Single-arrow best-move suggestion overlay for Lichess.
+Tampermonkey script for Lichess that sends each post-opponent position to GitHub Actions and prints top Stockfish lines in the workflow log.
 
-## Install
-* The code in `meanChess.js` is a Tampermonkey userscript. 
-* `chess_server.py` is a Flask server using `python-chess` for chess programming utilities. Run it using `python chess_server.py`. Before doing so, run `pip install -r requirements.txt`. Change `PATH_TO_STOCKFISH` to your local Stockfish engine.
+## What it does
+After your opponent moves, the userscript automatically sends the game move history to a GitHub Actions workflow. The workflow rebuilds the position, runs Stockfish with MultiPV=3, and logs output like:
+
+```text
+Opponent:    Samyakchourasia
+Current move:26
+FEN:         r4rk1/pp3ppp/2p1pn2/3p4/3P4/2P1P1P1/PP3PBP/2R1R1K1 b - - 0 26
+STOCKFISH    26... Qf7    +0.9
+ALTERNATIVE  26... Re7    +0.1
+ALT #2       26... Rf8    -0.2
+Link: https://lichess.org/24a85lUX
+```
+
+## Setup
+1. Fork or push this repo to your own GitHub account.
+2. Create a Personal Access Token (classic is fine) with at least **repo** and **workflow** scopes.
+3. Open `meanChess.js` and set:
+   - `owner`
+   - `repo`
+   - `workflowFile` (default: `tampermonkey-api.yml`)
+   - `githubToken`
+   - optional: `ref`, `depthSeconds`, `pollMs` (recommended for blitz: `depthSeconds: '0.7'`)
+4. Install/update `meanChess.js` in Tampermonkey.
+5. Open a Lichess game while logged in.
+
+Now every time your opponent completes a move (and it becomes your turn), the script dispatches the workflow.
+
+## GitHub Actions workflow
+Workflow file: `.github/workflows/tampermonkey-api.yml`
+
+It:
+1. Installs Python deps + Stockfish.
+2. Recreates the position from SAN move history.
+3. Analyzes with MultiPV=3.
+4. Prints best move + two alternatives with evals.
+
+## Local API mode (legacy)
+`chess_server.py` is still included if you want to run local Flask + Stockfish manually, but the userscript is now focused on GitHub Actions dispatch mode.
 
 
-## Run with GitHub Actions + Tampermonkey (phone-friendly)
-1. Push this repo to your own GitHub account.
-2. Open **Actions** -> **Temporary API for Tampermonkey** -> **Run workflow**.
-3. After it starts, open job logs and copy the printed `https://...trycloudflare.com` URL.
-4. In Tampermonkey, install/update `meanChess.js`.
-5. Open Lichess, paste that URL into **API URL** in the control box, then tap **Show Best Move**.
+## Exactly what you need to do (quick)
+1. Open `meanChess.js`.
+2. Replace these placeholders in `CONFIG`:
+   - `owner: 'YOUR_GITHUB_USERNAME'`
+   - `repo: 'YOUR_REPO_NAME'`
+   - `githubToken: 'YOUR_GITHUB_PAT'`
+3. Keep `depthSeconds: '0.7'` for blitz (fast response).
+4. Save script in Tampermonkey and enable it.
+5. Open a Lichess game (logged in).
+6. After every opponent move, check GitHub Actions logs for:
+   - `STOCKFISH`
+   - `ALTERNATIVE`
+   - `ALT #2`
 
-Notes:
-- You do not type chess moves manually; the userscript reads move history directly from the board.
-- The Actions URL is temporary and expires when the workflow ends.
-- Re-run workflow whenever the URL expires.
-
-## Run locally (optional)
-1. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-2. Install Stockfish and set environment variable:
-   ```bash
-   export STOCKFISH_PATH=/path/to/stockfish
-   ```
-3. Start the API server:
-   ```bash
-   python chess_server.py
-   ```
-4. In Tampermonkey keep API URL empty (defaults to `http://127.0.0.1:5000`).
-
-## Phone note
-For phone usage, easiest is running the included GitHub Actions workflow to get a temporary public API URL. You still do **not** type moves manually.
-
-## Usage
-The control panel appears at the bottom of the page during a Lichess game. Click **Show Best Move** to draw a single arrow for the engine's top move in the current position.
-
-MeanChess does not work when playing anonymously.
-
-## Bugs
-1. If the arrow feels stale after many premoves, click **Show Best Move** again to refresh it.
-2. Arrows may not have arrowheads. Solution: Draw an arrow.
-3. The first suggestion might show best move for opponent. This only happens once.
-
-The mentioned bugs occur in Chrome, and I have yet to see 1 and 2 in Firefox and Firefox forks.
-
-## Depth recommendation
-Based on time vs. best move trade-offs.
-| Gamemode | Depth |
-| ------:| -----------:|
-| Bullet       | 0.1 s |
-| Blitz        | 1 s |
-| $\geq$ Rapid | +3 s |
-
-## Demo
-[mean-chess-demo.webm](https://github.com/sanglantes/mean-chess/assets/101125878/942a80c3-8ea4-4c80-91e6-7f7392106fe3)
-
+If you want even faster but weaker suggestions, set `depthSeconds` to `0.5`.
