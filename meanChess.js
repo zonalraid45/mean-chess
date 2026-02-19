@@ -166,17 +166,29 @@ function removeArrow() {
 }
 
 function fetchMove(depth) {
-	let moveHistory = getMoveHistory()
+	let moveHistory = getMoveHistory();
 	GM_xmlhttpRequest({
 		method: "GET",
-		url: getApiBaseUrl() + "/api?algebra=" + moveHistory.toString() + "&depth=" + depth + "&discrete=0",
+		url: getApiBaseUrl() + "/api?algebra=" + moveHistory.toString() + "&depth=" + depth + "&discrete=1",
 		onload: function(response) {
-			var arrowElements = response.responseText.split(' ');
-			if (arrowElements[1].length > 2) { arrowElements[1] = arrowElements[1].slice(0, 2); }
-			drawArrow(arrowElements[0], arrowElements[1], 1, "#15781B", "g");
+			const moves = JSON.parse(response.responseText);
+			const arrowStyles = [
+				{ color: "#15781B", arrowHead: "g" },
+				{ color: "#2B6BE0", arrowHead: "b" },
+				{ color: "#D14646", arrowHead: "r" }
+			];
+
+			moves.slice(0, arrowStyles.length).forEach(function(move, index) {
+				if (move.length < 4) return;
+				const startSquare = move.slice(0, 2);
+				const destinationSquare = move.slice(2, 4);
+				const style = arrowStyles[index];
+				drawArrow(startSquare, destinationSquare, 1, style.color, style.arrowHead);
+			});
 		}
 	});
 }
+
 
 function getDepth() {
 	if (document.getElementById("depth").value == '') {
@@ -201,13 +213,46 @@ pathElement.setAttribute("d", "M0,0 V4 L3,2 Z");
 pathElement.setAttribute("fill", "#15781B");
 // ************************************ NORMAL
 
+const markerElementBlue = document.createElementNS("http://www.w3.org/2000/svg", "marker");
+markerElementBlue.setAttribute("id", "arrowhead-b");
+markerElementBlue.setAttribute("orient", "auto");
+markerElementBlue.setAttribute("overflow", "visible");
+markerElementBlue.setAttribute("markerWidth", "4");
+markerElementBlue.setAttribute("markerHeight", "4");
+markerElementBlue.setAttribute("refX", "2.05");
+markerElementBlue.setAttribute("refY", "2");
+markerElementBlue.setAttribute("cgKey", "b");
+
+const pathElementBlue = document.createElementNS("http://www.w3.org/2000/svg", "path");
+pathElementBlue.setAttribute("d", "M0,0 V4 L3,2 Z");
+pathElementBlue.setAttribute("fill", "#2B6BE0");
+
+const markerElementRed = document.createElementNS("http://www.w3.org/2000/svg", "marker");
+markerElementRed.setAttribute("id", "arrowhead-r");
+markerElementRed.setAttribute("orient", "auto");
+markerElementRed.setAttribute("overflow", "visible");
+markerElementRed.setAttribute("markerWidth", "4");
+markerElementRed.setAttribute("markerHeight", "4");
+markerElementRed.setAttribute("refX", "2.05");
+markerElementRed.setAttribute("refY", "2");
+markerElementRed.setAttribute("cgKey", "r");
+
+const pathElementRed = document.createElementNS("http://www.w3.org/2000/svg", "path");
+pathElementRed.setAttribute("d", "M0,0 V4 L3,2 Z");
+pathElementRed.setAttribute("fill", "#D14646");
+
 markerElement.appendChild(pathElement);
+markerElementBlue.appendChild(pathElementBlue);
+markerElementRed.appendChild(pathElementRed);
 
 const defsElement = document.querySelector(".cg-shapes defs");
 
 if (defsElement) {
   defsElement.appendChild(markerElement);
+  defsElement.appendChild(markerElementBlue);
+  defsElement.appendChild(markerElementRed);
 }
+
 
 var player = document.getElementById("user_tag").textContent;
 var playerColour = whatPlayerColour(player);
@@ -265,7 +310,7 @@ controlBoxDiv.innerHTML = `
     <button id="moveButton" class="cheatButton">Show Best Move</button>
     <input id="depth" type="text" placeholder="Analysis depth (seconds)">
     <input id="apiBaseUrl" type="text" placeholder="API URL (default http://127.0.0.1:5000)">
-    <p>Shows one arrow for the best move only.</p>
+    <p>Shows top 3 moves: best (green), second (blue), third (red).</p>
 </div>
 `;
 
