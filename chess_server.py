@@ -1,4 +1,4 @@
-from flask import Flask, request
+from flask import Flask, jsonify, request
 import os
 import chess, chess.engine
 
@@ -17,18 +17,15 @@ def get_best_move(fen, depth, discrete):
     board = chess.Board(fen)
     stockfish_path = os.getenv("STOCKFISH_PATH", "PATH_TO_STOCKFISH")
     engine = chess.engine.SimpleEngine.popen_uci(stockfish_path)
+    try:
+        if not discrete:
+            result = engine.play(board, chess.engine.Limit(time=depth))
+            return result.move
 
-    if not discrete:
-        result = engine.play(board, chess.engine.Limit(time=depth))
+        analyse = engine.analyse(board, chess.engine.Limit(time=depth), multipv=3)
+        return [result["pv"][0].uci() for result in analyse]
+    finally:
         engine.quit()
-
-        return result.move
-
-    elif discrete:
-        analyse = engine.analyse(board, chess.engine.Limit(time=depth), multipv=2)
-        moves = [result["pv"][0].uci() for result in analyse]
-
-        return moves
 
 
 @app.route('/', methods=['GET'])
@@ -48,7 +45,7 @@ def api():
         return best_move
 
     elif discrete:
-        return best_move
+        return jsonify(best_move)
 
 if __name__ == "__main__":
     app.run()
