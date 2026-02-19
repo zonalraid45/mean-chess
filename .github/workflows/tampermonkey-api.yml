@@ -1,17 +1,20 @@
-name: Temporary API for Tampermonkey
+name: Tampermonkey Position Analyzer
 
 on:
+  repository_dispatch:
+    types: [analyze-position]
   workflow_dispatch:
     inputs:
-      run_minutes:
-        description: "How long to keep API online (max 55)"
+      depth:
+        description: "Stockfish think time in seconds"
         required: false
-        default: "45"
+        default: "0.7"
+        type: string
 
 jobs:
-  host-api:
+  analyze-position:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -19,7 +22,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install dependencies
         run: |
@@ -27,37 +30,63 @@ jobs:
           pip install -r requirements.txt
           sudo apt-get update
           sudo apt-get install -y stockfish
-          curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
-          chmod +x cloudflared
 
-      - name: Start chess API
+      - name: Analyze current position
         env:
+          ALGEBRA: ${{ github.event.client_payload.algebra }}
+          DEPTH: ${{ github.event.client_payload.depth || inputs.depth || '0.7' }}
+          OPPONENT: ${{ github.event.client_payload.opponent || 'Unknown' }}
+          CURRENT_MOVE: ${{ github.event.client_payload.current_move || '1' }}
+          GAME_URL: ${{ github.event.client_payload.game_url || 'https://lichess.org' }}
           STOCKFISH_PATH: /usr/games/stockfish
         run: |
-          nohup python chess_server.py > api.log 2>&1 &
-          sleep 3
-          curl -sf "http://127.0.0.1:5000/api?algebra=&depth=0.1&discrete=0" || (cat api.log && exit 1)
+          python - <<'PY'
+          import os
+          import chess
+          import chess.engine
 
-      - name: Create temporary public URL
-        run: |
-          nohup ./cloudflared tunnel --url http://127.0.0.1:5000 --no-autoupdate > tunnel.log 2>&1 &
-          for i in {1..20}; do
-            URL=$(grep -o 'https://[-a-zA-Z0-9]*\.trycloudflare\.com' tunnel.log | head -n1 || true)
-            if [ -n "$URL" ]; then
-              echo "PUBLIC_API_URL=$URL" | tee -a "$GITHUB_ENV"
-              echo "Use this URL in Tampermonkey API URL field: $URL"
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "Failed to get tunnel URL"
-          cat tunnel.log
-          exit 1
+          algebra = (os.environ.get("ALGEBRA") or "").strip()
+          depth = float(os.environ.get("DEPTH") or "1.0")
+          opponent = (os.environ.get("OPPONENT") or "Unknown").strip()
+          current_move = (os.environ.get("CURRENT_MOVE") or "1").strip()
+          game_url = (os.environ.get("GAME_URL") or "https://lichess.org").strip()
+          stockfish_path = os.environ.get("STOCKFISH_PATH", "/usr/games/stockfish")
 
-      - name: Keep API alive
-        run: |
-          MINUTES="${{ github.event.inputs.run_minutes }}"
-          if [ -z "$MINUTES" ]; then MINUTES=45; fi
-          if [ "$MINUTES" -gt 55 ] 2>/dev/null; then MINUTES=55; fi
-          echo "API available at $PUBLIC_API_URL for ~${MINUTES} minute(s)."
-          sleep "$((MINUTES * 60))"
+          board = chess.Board()
+          if algebra:
+            for san in algebra.split():
+              board.push_san(san)
+
+          side_to_move = board.turn
+          move_prefix = f"{current_move}{'...' if side_to_move == chess.BLACK else '.'}"
+
+          def format_eval(score):
+            pov = score.pov(side_to_move)
+            if pov.is_mate():
+              mate = pov.mate()
+              return f"#{mate}"
+            cp = pov.score(mate_score=100000)
+            return f"{cp / 100:+.1f}"
+
+          with chess.engine.SimpleEngine.popen_uci(stockfish_path) as engine:
+            infos = engine.analyse(board, chess.engine.Limit(time=depth), multipv=3)
+
+          lines = [
+            f"Opponent:    {opponent}",
+            f"Current move:{current_move}",
+            f"FEN:         {board.fen()}",
+          ]
+
+          labels = ["STOCKFISH", "ALTERNATIVE", "ALT #2"]
+          for index, label in enumerate(labels):
+            if index < len(infos) and infos[index].get("pv"):
+              move = infos[index]["pv"][0]
+              san = board.san(move)
+              score = format_eval(infos[index]["score"])
+              lines.append(f"{label:<12} {move_prefix} {san:<7} {score}")
+            else:
+              lines.append(f"{label:<12} {move_prefix} (n/a)   (n/a)")
+
+          lines.append(f"Link: {game_url}")
+          print("\n".join(lines))
+          PY
